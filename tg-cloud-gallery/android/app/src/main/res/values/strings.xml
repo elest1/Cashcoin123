@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TG Drive</string>
+    <string name="title_activity_main">TG Drive</string>
+    <string name="package_name">com.tgcloud.drive</string>
+    <string name="custom_url_scheme">com.tgcloud.drive</string>
+</resources>
