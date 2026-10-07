@@ -1,8 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Folder, Image as ImageIcon, FileText, Upload, Plus, Search, 
-  HardDrive, Grid, List, ArrowLeft, Download, Film, Music, Sparkles, ChevronRight
-} from 'lucide-react';
 
 const BOT_TOKEN = "8851205680:AAFl-e_KjW2qFN1rGQ-kJ80gcdWDlyPRlyo";
 const CHANNEL_ID = "-1003983369108";
@@ -10,51 +6,44 @@ const CHANNEL_ID = "-1003983369108";
 export default function App() {
   const [activeTab, setActiveTab] = useState('gallery');
   const [files, setFiles] = useState([]);
-  const [folders, setFolders] = useState(['Camera', 'Screenshots', 'Documents']);
+  const [folders] = useState(['Camera', 'Downloads', 'Documents', 'WhatsApp Media']);
   const [currentFolder, setCurrentFolder] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [search, setSearch] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [selectedMedia, setSelectedMedia] = useState(null);
-  const [viewMode, setViewMode] = useState('grid');
+  const [uploadStatus, setUploadStatus] = useState('');
+  const [previewMedia, setPreviewMedia] = useState(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    const cached = localStorage.getItem('tg_cloud_media_v2');
-    if (cached) {
-      try { setFiles(JSON.parse(cached)); } catch (e) {}
+    const saved = localStorage.getItem('tg_nexus_vault_v1');
+    if (saved) {
+      try { setFiles(JSON.parse(saved)); } catch (e) {}
     }
   }, []);
 
-  const saveFiles = (newFiles) => {
-    setFiles(newFiles);
-    localStorage.setItem('tg_cloud_media_v2', JSON.stringify(newFiles));
+  const saveFiles = (list) => {
+    setFiles(list);
+    localStorage.setItem('tg_nexus_vault_v1', JSON.stringify(list));
   };
 
   const handleUpload = async (e) => {
-    const uploadedFiles = Array.from(e.target.files);
-    if (!uploadedFiles.length) return;
+    const list = Array.from(e.target.files);
+    if (!list.length) return;
 
     setIsUploading(true);
-    setUploadProgress(10);
-
-    for (let i = 0; i < uploadedFiles.length; i++) {
-      const file = uploadedFiles[i];
-      const formData = new FormData();
-      formData.append('chat_id', CHANNEL_ID);
+    for (let i = 0; i < list.length; i++) {
+      const file = list[i];
+      setUploadStatus(`Uploading ${i + 1} of ${list.length}...`);
 
       const isImg = file.type.startsWith('image/');
       const isVid = file.type.startsWith('video/');
       const endpoint = isImg ? 'sendPhoto' : isVid ? 'sendVideo' : 'sendDocument';
       const field = isImg ? 'photo' : isVid ? 'video' : 'document';
 
+      const formData = new FormData();
+      formData.append('chat_id', CHANNEL_ID);
       formData.append(field, file);
-      formData.append('caption', JSON.stringify({
-        name: file.name,
-        size: file.size,
-        folder: currentFolder,
-        date: new Date().toISOString()
-      }));
+      formData.append('caption', file.name);
 
       try {
         const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${endpoint}`, {
@@ -62,7 +51,7 @@ export default function App() {
           body: formData
         });
         const data = await res.json();
-        
+
         if (data.ok) {
           let fileId = '';
           if (isImg) fileId = data.result.photo.slice(-1)[0].file_id;
@@ -71,140 +60,134 @@ export default function App() {
 
           const pathRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`);
           const pathData = await pathRes.json();
-          const fileUrl = pathData.ok ? `https://api.telegram.org/file/bot${BOT_TOKEN}/${pathData.result.file_path}` : '';
+          const url = pathData.ok ? `https://api.telegram.org/file/bot${BOT_TOKEN}/${pathData.result.file_path}` : '';
 
-          const newItem = {
+          const item = {
             id: data.result.message_id,
             name: file.name,
-            size: file.size,
+            size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
             type: file.type,
-            folder: currentFolder,
-            url: fileUrl,
-            fileId,
-            date: new Date().toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })
+            url,
+            folder: currentFolder || 'General',
+            date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
           };
 
-          saveFiles([newItem, ...files]);
+          saveFiles([item, ...files]);
         }
       } catch (err) {
         console.error(err);
       }
-      setUploadProgress(Math.round(((i + 1) / uploadedFiles.length) * 100));
     }
-
     setIsUploading(false);
-    setUploadProgress(0);
+    setUploadStatus('');
   };
 
-  const filteredFiles = files.filter(f => {
-    const matchesSearch = f.name.toLowerCase().includes(searchQuery.toLowerCase());
-    if (activeTab === 'gallery') {
-      return matchesSearch && (f.type.startsWith('image/') || f.type.startsWith('video/'));
-    }
-    if (activeTab === 'drive') {
-      return matchesSearch && (currentFolder ? f.folder === currentFolder : true);
-    }
-    return matchesSearch;
+  const filtered = files.filter(f => {
+    const matches = f.name.toLowerCase().includes(search.toLowerCase());
+    if (activeTab === 'gallery') return matches && (f.type.startsWith('image/') || f.type.startsWith('video/'));
+    if (activeTab === 'drive') return matches && (currentFolder ? f.folder === currentFolder : true);
+    return matches;
   });
 
-  const formatSize = (bytes) => {
-    if (!bytes) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  };
-
   return (
-    <div className="flex flex-col h-screen w-full bg-slate-950 text-slate-100 select-none overflow-hidden font-sans">
-      <header className="px-4 pt-12 pb-3 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 flex items-center justify-between z-10">
-        <div className="flex items-center space-x-3">
+    <div style={{
+      width: '100vw', height: '100vh', backgroundColor: '#090d16', color: '#f8fafc',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+      display: 'flex', flexDirection: 'column', overflow: 'hidden', boxSizing: 'border-box'
+    }}>
+
+      {/* Android Top Header */}
+      <div style={{
+        padding: '48px 18px 14px 18px', backgroundColor: '#0f172a',
+        borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex',
+        justifyContent: 'space-between', alignItems: 'center'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {currentFolder && activeTab === 'drive' ? (
-            <button onClick={() => setCurrentFolder('')} className="p-1.5 rounded-full bg-slate-800 active:scale-95">
-              <ArrowLeft size={20} />
+            <button
+              onClick={() => setCurrentFolder('')}
+              style={{
+                width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#1e293b',
+                color: '#38bdf8', border: 'none', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', fontSize: '16px', cursor: 'pointer'
+              }}
+            >
+              ←
             </button>
           ) : (
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-md">
-              <HardDrive size={20} className="text-white" />
+            <div style={{
+              width: '38px', height: '38px', borderRadius: '12px',
+              background: 'linear-gradient(135deg, #0284c7, #4f46e5)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px'
+            }}>
+              ☁️
             </div>
           )}
           <div>
-            <h1 className="text-lg font-bold tracking-tight text-white leading-tight">
-              {activeTab === 'gallery' ? 'Gallery' : activeTab === 'drive' ? (currentFolder || 'Cloud Drive') : 'Storage'}
-            </h1>
-            <p className="text-[11px] font-medium text-emerald-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              Telegram Private Cloud
-            </p>
+            <div style={{ fontSize: '17px', fontWeight: '800', letterSpacing: '-0.2px' }}>
+              {activeTab === 'gallery' ? 'Photos & Videos' : activeTab === 'drive' ? (currentFolder || 'Cloud Drive') : 'Unlimited Storage'}
+            </div>
+            <div style={{ fontSize: '11px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '1px' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
+              Telegram Sync Active
+            </div>
           </div>
-        </div>
-
-        {activeTab === 'drive' && (
-          <button 
-            onClick={() => setViewMode(v => v === 'grid' ? 'list' : 'grid')}
-            className="p-2 rounded-xl bg-slate-800 text-slate-300 active:scale-95"
-          >
-            {viewMode === 'grid' ? <List size={18} /> : <Grid size={18} />}
-          </button>
-        )}
-      </header>
-
-      <div className="px-4 py-2.5 bg-slate-950">
-        <div className="relative flex items-center">
-          <Search size={16} className="absolute left-3.5 text-slate-400" />
-          <input
-            type="text"
-            placeholder={activeTab === 'gallery' ? "Search photos & videos..." : "Search cloud documents..."}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-2 pl-10 pr-4 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-all"
-          />
         </div>
       </div>
 
-      <main className="flex-1 overflow-y-auto px-4 pb-24">
-        {isUploading && (
-          <div className="my-3 p-3 bg-sky-950/60 border border-sky-800 rounded-2xl flex flex-col gap-2">
-            <div className="flex justify-between text-xs text-sky-300 font-semibold">
-              <span>Backing up to Telegram Channel...</span>
-              <span>{uploadProgress}%</span>
-            </div>
-            <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-sky-500 transition-all duration-300 rounded-full"
-                style={{ width: `${uploadProgress}%` }}
-              />
-            </div>
-          </div>
-        )}
+      {/* Modern Search Pill */}
+      <div style={{ padding: '10px 16px 6px 16px' }}>
+        <input
+          type="text"
+          placeholder={activeTab === 'gallery' ? 'Search gallery media...' : 'Search files & docs...'}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            width: '100%', padding: '12px 18px', borderRadius: '24px',
+            backgroundColor: '#131d31', border: '1px solid #1e293b', color: '#fff',
+            fontSize: '14px', outline: 'none', boxSizing: 'border-box'
+          }}
+        />
+      </div>
 
+      {/* Upload Banner */}
+      {isUploading && (
+        <div style={{
+          margin: '6px 16px', padding: '10px 14px', borderRadius: '12px',
+          background: 'linear-gradient(90deg, #0369a1, #4338ca)', color: '#fff',
+          fontSize: '12px', fontWeight: '600', textAlign: 'center'
+        }}>
+          {uploadStatus}
+        </div>
+      )}
+
+      {/* Content Area */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px 90px 16px' }}>
+
+        {/* GALLERY VIEW */}
         {activeTab === 'gallery' && (
-          <div className="mt-2">
-            {filteredFiles.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-slate-500">
-                <ImageIcon size={52} className="stroke-[1.2] mb-3 text-slate-600" />
-                <p className="text-sm font-medium">No media uploaded yet</p>
-                <p className="text-xs text-slate-600 mt-1">Tap the + button below to backup photos</p>
+          <div>
+            {filtered.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '80px 20px', color: '#64748b' }}>
+                <div style={{ fontSize: '46px', marginBottom: '10px' }}>🖼️</div>
+                <div style={{ fontSize: '15px', fontWeight: '600', color: '#cbd5e1' }}>No media uploaded yet</div>
+                <div style={{ fontSize: '12px', marginTop: '4px' }}>Tap + below to store photos on Telegram</div>
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-1.5">
-                {filteredFiles.map((file) => (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+                {filtered.map(item => (
                   <div
-                    key={file.id}
-                    onClick={() => setSelectedMedia(file)}
-                    className="relative aspect-square rounded-lg overflow-hidden bg-slate-900 active:opacity-80 transition"
+                    key={item.id}
+                    onClick={() => setPreviewMedia(item)}
+                    style={{
+                      aspectRatio: '1', backgroundColor: '#131d31', borderRadius: '6px',
+                      overflow: 'hidden', cursor: 'pointer', position: 'relative'
+                    }}
                   >
-                    {file.type.startsWith('video/') ? (
-                      <div className="w-full h-full flex items-center justify-center bg-slate-800">
-                        <Film size={26} className="text-slate-400" />
-                      </div>
+                    {item.type.startsWith('video/') ? (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: '26px' }}>🎬</div>
                     ) : (
-                      <img 
-                        src={file.url} 
-                        alt={file.name} 
-                        className="w-full h-full object-cover" 
-                        loading="lazy"
-                      />
+                      <img src={item.url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     )}
                   </div>
                 ))}
@@ -213,25 +196,25 @@ export default function App() {
           </div>
         )}
 
+        {/* DRIVE VIEW */}
         {activeTab === 'drive' && (
-          <div className="mt-2 space-y-4">
+          <div>
             {!currentFolder && (
-              <div>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">Folders</p>
-                <div className="grid grid-cols-2 gap-2.5">
-                  {folders.map((f) => (
+              <div style={{ marginBottom: '18px' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>Folders</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+                  {folders.map(f => (
                     <div
                       key={f}
                       onClick={() => setCurrentFolder(f)}
-                      className="p-3 bg-slate-900 border border-slate-800/80 rounded-2xl flex items-center justify-between active:scale-98 active:bg-slate-800 transition"
+                      style={{
+                        padding: '14px', backgroundColor: '#131d31', borderRadius: '16px',
+                        display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
+                        border: '1px solid #1e293b'
+                      }}
                     >
-                      <div className="flex items-center space-x-2.5">
-                        <div className="p-2 rounded-xl bg-sky-500/10 text-sky-400">
-                          <Folder size={18} />
-                        </div>
-                        <span className="text-sm font-medium text-slate-200 truncate">{f}</span>
-                      </div>
-                      <ChevronRight size={16} className="text-slate-600" />
+                      <span style={{ fontSize: '22px' }}>📁</span>
+                      <span style={{ fontSize: '13px', fontWeight: '600', color: '#e2e8f0' }}>{f}</span>
                     </div>
                   ))}
                 </div>
@@ -239,51 +222,31 @@ export default function App() {
             )}
 
             <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
-                {currentFolder ? `${currentFolder} Files` : 'All Documents & Files'}
-              </p>
-
-              {filteredFiles.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-slate-500">
-                  <FileText size={48} className="stroke-[1.2] mb-2 text-slate-600" />
-                  <p className="text-sm font-medium">No files found</p>
-                </div>
-              ) : viewMode === 'list' ? (
-                <div className="space-y-2">
-                  {filteredFiles.map((file) => (
-                    <div 
-                      key={file.id} 
-                      onClick={() => setSelectedMedia(file)}
-                      className="p-3 bg-slate-900 border border-slate-800/70 rounded-2xl flex items-center justify-between active:bg-slate-800"
-                    >
-                      <div className="flex items-center space-x-3 overflow-hidden">
-                        <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 shrink-0">
-                          {file.type.startsWith('image/') ? <ImageIcon size={18} /> : 
-                           file.type.startsWith('video/') ? <Film size={18} /> : 
-                           file.type.startsWith('audio/') ? <Music size={18} /> : <FileText size={18} />}
-                        </div>
-                        <div className="truncate">
-                          <p className="text-sm font-medium text-slate-200 truncate">{file.name}</p>
-                          <p className="text-[11px] text-slate-500 mt-0.5">{file.date} • {formatSize(file.size)}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
+                {currentFolder ? `${currentFolder} Files` : 'All Files'}
+              </div>
+              {filtered.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '50px 20px', color: '#64748b' }}>
+                  <div style={{ fontSize: '38px', marginBottom: '8px' }}>📄</div>
+                  <div style={{ fontSize: '13px' }}>Folder is empty</div>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-2.5">
-                  {filteredFiles.map((file) => (
-                    <div 
-                      key={file.id} 
-                      onClick={() => setSelectedMedia(file)}
-                      className="p-3 bg-slate-900 border border-slate-800/70 rounded-2xl flex flex-col justify-between aspect-square active:scale-98 transition"
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {filtered.map(item => (
+                    <div
+                      key={item.id}
+                      onClick={() => setPreviewMedia(item)}
+                      style={{
+                        padding: '12px 14px', backgroundColor: '#131d31', borderRadius: '14px',
+                        display: 'flex', alignItems: 'center', gap: '12px', border: '1px solid #1e293b'
+                      }}
                     >
-                      <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
-                        {file.type.startsWith('image/') ? <ImageIcon size={20} /> : <FileText size={20} />}
+                      <div style={{ fontSize: '24px' }}>
+                        {item.type.startsWith('image/') ? '🖼️' : item.type.startsWith('video/') ? '🎬' : '📄'}
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-slate-200 truncate">{file.name}</p>
-                        <p className="text-[11px] text-slate-500 mt-0.5">{formatSize(file.size)}</p>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{item.size} • {item.date}</div>
                       </div>
                     </div>
                   ))}
@@ -293,126 +256,169 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === 'stats' && (
-          <div className="mt-4 space-y-4">
-            <div className="p-5 bg-gradient-to-br from-slate-900 to-indigo-950 border border-indigo-900/40 rounded-3xl">
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="p-2.5 rounded-2xl bg-indigo-500/20 text-indigo-400">
-                  <Sparkles size={24} />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-white">Unlimited Cloud</h2>
-                  <p className="text-xs text-indigo-300">Powered by Telegram Channel API</p>
-                </div>
+        {/* CLOUD TAB */}
+        {activeTab === 'cloud' && (
+          <div style={{ padding: '8px 0' }}>
+            <div style={{ padding: '20px', backgroundColor: '#131d31', borderRadius: '20px', border: '1px solid #1e293b' }}>
+              <div style={{ fontSize: '16px', fontWeight: '800', marginBottom: '4px' }}>Telegram Cloud Engine</div>
+              <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '18px' }}>Private channel-backed unlimited storage</div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '10px 0', borderBottom: '1px solid #1e293b' }}>
+                <span style={{ color: '#64748b' }}>Total Files</span>
+                <span style={{ fontWeight: '700' }}>{files.length}</span>
               </div>
-              <div className="space-y-1.5 text-xs text-slate-400">
-                <div className="flex justify-between">
-                  <span>Total Files:</span>
-                  <span className="font-semibold text-slate-200">{files.length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Channel ID:</span>
-                  <span className="font-semibold text-slate-200">{CHANNEL_ID}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Cloud Limit:</span>
-                  <span className="font-semibold text-emerald-400">Unlimited (up to 2GB/file)</span>
-                </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '10px 0', borderBottom: '1px solid #1e293b' }}>
+                <span style={{ color: '#64748b' }}>Cloud Capacity</span>
+                <span style={{ fontWeight: '700', color: '#10b981' }}>Unlimited</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '10px 0' }}>
+                <span style={{ color: '#64748b' }}>Max File Size</span>
+                <span style={{ fontWeight: '700' }}>2 GB per file</span>
               </div>
             </div>
 
             <button
               onClick={() => {
-                if (window.confirm("Clear offline app cache? Files in your Telegram channel will remain safe.")) {
-                  localStorage.removeItem('tg_cloud_media_v2');
+                if (window.confirm('Clear local offline cache? Files on Telegram will remain safe.')) {
+                  localStorage.removeItem('tg_nexus_vault_v1');
                   setFiles([]);
                 }
               }}
-              className="w-full py-3.5 px-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl text-xs font-semibold active:bg-red-500/20"
+              style={{
+                marginTop: '16px', width: '100%', padding: '14px', borderRadius: '14px',
+                background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)',
+                color: '#f87171', fontSize: '13px', fontWeight: '700', cursor: 'pointer'
+              }}
             >
-              Clear Local App Cache
+              Clear Cache
             </button>
           </div>
         )}
-      </main>
+      </div>
 
-      <input 
-        type="file" 
-        multiple 
-        ref={fileInputRef} 
-        onChange={handleUpload} 
-        className="hidden" 
+      {/* Floating Action Button */}
+      <input
+        type="file"
+        multiple
+        ref={fileInputRef}
+        onChange={handleUpload}
+        style={{ display: 'none' }}
       />
       <button
         onClick={() => fileInputRef.current && fileInputRef.current.click()}
-        className="fixed bottom-20 right-5 w-14 h-14 rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-sky-500/25 active:scale-95 transition-all z-20"
+        style={{
+          position: 'fixed', bottom: '78px', right: '18px', width: '56px', height: '56px',
+          borderRadius: '18px', background: 'linear-gradient(135deg, #0284c7, #4f46e5)',
+          color: '#fff', fontSize: '28px', border: 'none', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', boxShadow: '0 8px 20px rgba(2, 132, 199, 0.45)', cursor: 'pointer', zIndex: 30
+        }}
       >
-        <Plus size={28} />
+        +
       </button>
 
-      <nav className="fixed bottom-0 left-0 right-0 h-16 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 px-6 flex items-center justify-around z-20">
-        <button
+      {/* Native Bottom Bar */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0, height: '64px',
+        backgroundColor: '#0b1120', borderTop: '1px solid #1e293b',
+        display: 'flex', justifyContent: 'space-around', alignItems: 'center', zIndex: 20
+      }}>
+        <div
           onClick={() => setActiveTab('gallery')}
-          className={`flex flex-col items-center gap-1 transition ${activeTab === 'gallery' ? 'text-sky-400 font-semibold' : 'text-slate-400'}`}
+          style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
+            cursor: 'pointer', color: activeTab === 'gallery' ? '#38bdf8' : '#64748b'
+          }}
         >
-          <ImageIcon size={20} />
-          <span className="text-[11px]">Photos</span>
-        </button>
+          <div style={{
+            fontSize: '18px', padding: '3px 18px', borderRadius: '14px',
+            backgroundColor: activeTab === 'gallery' ? 'rgba(56, 189, 248, 0.15)' : 'transparent'
+          }}>
+            🖼️
+          </div>
+          <span style={{ fontSize: '11px', fontWeight: activeTab === 'gallery' ? '700' : '500' }}>Photos</span>
+        </div>
 
-        <button
+        <div
           onClick={() => setActiveTab('drive')}
-          className={`flex flex-col items-center gap-1 transition ${activeTab === 'drive' ? 'text-sky-400 font-semibold' : 'text-slate-400'}`}
+          style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
+            cursor: 'pointer', color: activeTab === 'drive' ? '#38bdf8' : '#64748b'
+          }}
         >
-          <Folder size={20} />
-          <span className="text-[11px]">Files & Drive</span>
-        </button>
+          <div style={{
+            fontSize: '18px', padding: '3px 18px', borderRadius: '14px',
+            backgroundColor: activeTab === 'drive' ? 'rgba(56, 189, 248, 0.15)' : 'transparent'
+          }}>
+            📁
+          </div>
+          <span style={{ fontSize: '11px', fontWeight: activeTab === 'drive' ? '700' : '500' }}>Drive</span>
+        </div>
 
-        <button
-          onClick={() => setActiveTab('stats')}
-          className={`flex flex-col items-center gap-1 transition ${activeTab === 'stats' ? 'text-sky-400 font-semibold' : 'text-slate-400'}`}
+        <div
+          onClick={() => setActiveTab('cloud')}
+          style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
+            cursor: 'pointer', color: activeTab === 'cloud' ? '#38bdf8' : '#64748b'
+          }}
         >
-          <HardDrive size={20} />
-          <span className="text-[11px]">Cloud</span>
-        </button>
-      </nav>
+          <div style={{
+            fontSize: '18px', padding: '3px 18px', borderRadius: '14px',
+            backgroundColor: activeTab === 'cloud' ? 'rgba(56, 189, 248, 0.15)' : 'transparent'
+          }}>
+            ☁️
+          </div>
+          <span style={{ fontSize: '11px', fontWeight: activeTab === 'cloud' ? '700' : '500' }}>Cloud</span>
+        </div>
+      </div>
 
-      {selectedMedia && (
-        <div className="fixed inset-0 bg-black/95 z-50 flex flex-col justify-between p-4 backdrop-blur-sm">
-          <div className="flex items-center justify-between pt-8">
-            <button onClick={() => setSelectedMedia(null)} className="p-2 text-white/80 rounded-full bg-white/10">
-              <ArrowLeft size={22} />
-            </button>
-            <p className="text-sm font-medium text-white truncate max-w-[200px]">{selectedMedia.name}</p>
-            <a 
-              href={selectedMedia.url} 
-              target="_blank" 
-              rel="noreferrer" 
-              download 
-              className="p-2 text-white/80 rounded-full bg-white/10"
+      {/* Lightbox Preview */}
+      {previewMedia && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.96)',
+          zIndex: 100, display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+          padding: '44px 16px 24px 16px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <button
+              onClick={() => setPreviewMedia(null)}
+              style={{ background: '#1e293b', border: 'none', color: '#fff', padding: '8px 14px', borderRadius: '10px', fontSize: '13px' }}
             >
-              <Download size={20} />
+              ✕ Close
+            </button>
+            <div style={{ fontSize: '13px', color: '#94a3b8', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {previewMedia.name}
+            </div>
+            <a
+              href={previewMedia.url}
+              target="_blank"
+              rel="noreferrer"
+              download
+              style={{ background: '#0284c7', color: '#fff', padding: '8px 14px', borderRadius: '10px', fontSize: '13px', textDecoration: 'none' }}
+            >
+              Save
             </a>
           </div>
 
-          <div className="flex-1 flex items-center justify-center p-2">
-            {selectedMedia.type.startsWith('image/') ? (
-              <img src={selectedMedia.url} alt={selectedMedia.name} className="max-h-full max-w-full rounded-xl object-contain" />
-            ) : selectedMedia.type.startsWith('video/') ? (
-              <video src={selectedMedia.url} controls className="max-h-full max-w-full rounded-xl" autoPlay />
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px 0' }}>
+            {previewMedia.type.startsWith('image/') ? (
+              <img src={previewMedia.url} alt={previewMedia.name} style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: '14px', objectFit: 'contain' }} />
+            ) : previewMedia.type.startsWith('video/') ? (
+              <video src={previewMedia.url} controls autoPlay style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: '14px' }} />
             ) : (
-              <div className="text-center p-8 bg-slate-900 border border-slate-800 rounded-3xl">
-                <FileText size={48} className="mx-auto text-indigo-400 mb-3" />
-                <p className="text-sm font-medium text-slate-200">{selectedMedia.name}</p>
-                <p className="text-xs text-slate-500 mt-1">{formatSize(selectedMedia.size)}</p>
+              <div style={{ textAlign: 'center', color: '#cbd5e1' }}>
+                <div style={{ fontSize: '48px', marginBottom: '12px' }}>📄</div>
+                <div>{previewMedia.name}</div>
+                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>{previewMedia.size}</div>
               </div>
             )}
           </div>
 
-          <div className="pb-6 text-center text-xs text-slate-400">
-            Uploaded {selectedMedia.date} to Telegram Private Channel
+          <div style={{ textAlign: 'center', fontSize: '11px', color: '#64748b' }}>
+            Backed up to Telegram Private Channel
           </div>
         </div>
       )}
+
     </div>
   );
 }
