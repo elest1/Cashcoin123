@@ -1,306 +1,416 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Folder, Image as ImageIcon, FileText, Upload, Plus, Search, 
+  HardDrive, Grid, List, ArrowLeft, Download, Film, Music, Sparkles, ChevronRight
+} from 'lucide-react';
 
-const TG_BOT_TOKEN = "8851205680:AAFl-e_KjW2qFN1rGQ-kJ80gcdWDlyPRlyo";
-const TG_CHANNEL_ID = "-1003983369108";
-
-const Icons = {
-  HardDrive: () => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="22" y1="12" x2="2" y2="12"></line>
-      <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
-      <line x1="6" y1="16" x2="6.01" y2="16"></line>
-      <line x1="10" y1="16" x2="10.01" y2="16"></line>
-    </svg>
-  ),
-  Folder: () => (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="#38bdf8" stroke="#38bdf8" strokeWidth="1.5">
-      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-    </svg>
-  ),
-  Upload: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-      <polyline points="17 8 12 3 7 8"></polyline>
-      <line x1="12" y1="3" x2="12" y2="15"></line>
-    </svg>
-  ),
-  Plus: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="5" x2="12" y2="19"></line>
-      <line x1="5" y1="12" x2="19" y2="12"></line>
-    </svg>
-  ),
-  ArrowLeft: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="19" y1="12" x2="5" y2="12"></line>
-      <polyline points="12 19 5 12 12 5"></polyline>
-    </svg>
-  ),
-  FileText: () => (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-      <polyline points="14 2 14 8 20 8"></polyline>
-    </svg>
-  ),
-  Trash: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2">
-      <polyline points="3 6 5 6 21 6"></polyline>
-      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-    </svg>
-  ),
-  Download: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-      <polyline points="7 10 12 15 17 10"></polyline>
-      <line x1="12" y1="15" x2="12" y2="3"></line>
-    </svg>
-  ),
-  Close: () => (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="18" y1="6" x2="6" y2="18"></line>
-      <line x1="6" y1="6" x2="18" y2="18"></line>
-    </svg>
-  )
-};
+const BOT_TOKEN = "8851205680:AAFl-e_KjW2qFN1rGQ-kJ80gcdWDlyPRlyo";
+const CHANNEL_ID = "-1003983369108";
 
 export default function App() {
-  const [currentFolder, setCurrentFolder] = useState('root');
-  const [isUploading, setIsUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState('gallery');
+  const [files, setFiles] = useState([]);
+  const [folders, setFolders] = useState(['Camera', 'Screenshots', 'Documents']);
+  const [currentFolder, setCurrentFolder] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState('all');
-  const [activePreview, setActivePreview] = useState(null);
-
-  const [folders, setFolders] = useState(() => {
-    const saved = localStorage.getItem('tg_folders');
-    return saved ? JSON.parse(saved) : [
-      { id: 'photos', name: 'Photos & Gallery', parent: 'root' },
-      { id: 'docs', name: 'Documents', parent: 'root' }
-    ];
-  });
-
-  const [files, setFiles] = useState(() => {
-    const saved = localStorage.getItem('tg_files');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [selectedMedia, setSelectedMedia] = useState(null);
+  const [viewMode, setViewMode] = useState('grid');
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
-    localStorage.setItem('tg_folders', JSON.stringify(folders));
-  }, [folders]);
-
-  useEffect(() => {
-    localStorage.setItem('tg_files', JSON.stringify(files));
-  }, [files]);
-
-  const handleCreateFolder = () => {
-    const folderName = prompt('Enter folder name:');
-    if (!folderName) return;
-    setFolders([...folders, { id: Date.now().toString(), name: folderName, parent: currentFolder }]);
-  };
-
-  const handleDeleteFile = (id, e) => {
-    e.stopPropagation();
-    if (confirm('Remove file record from this view?')) {
-      setFiles(files.filter(f => f.id !== id));
+    const cached = localStorage.getItem('tg_cloud_media_v2');
+    if (cached) {
+      try { setFiles(JSON.parse(cached)); } catch (e) {}
     }
+  }, []);
+
+  const saveFiles = (newFiles) => {
+    setFiles(newFiles);
+    localStorage.setItem('tg_cloud_media_v2', JSON.stringify(newFiles));
   };
 
   const handleUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const uploadedFiles = Array.from(e.target.files);
+    if (!uploadedFiles.length) return;
 
     setIsUploading(true);
+    setUploadProgress(10);
 
-    try {
+    for (let i = 0; i < uploadedFiles.length; i++) {
+      const file = uploadedFiles[i];
       const formData = new FormData();
-      formData.append('chat_id', TG_CHANNEL_ID);
-      formData.append('caption', `Uploaded via Cloud Drive | Folder: ${currentFolder}`);
+      formData.append('chat_id', CHANNEL_ID);
 
-      let endpoint = 'sendDocument';
-      let fileKey = 'document';
+      const isImg = file.type.startsWith('image/');
+      const isVid = file.type.startsWith('video/');
+      const endpoint = isImg ? 'sendPhoto' : isVid ? 'sendVideo' : 'sendDocument';
+      const field = isImg ? 'photo' : isVid ? 'video' : 'document';
 
-      if (file.type.startsWith('image/')) {
-        endpoint = 'sendPhoto';
-        fileKey = 'photo';
-      }
+      formData.append(field, file);
+      formData.append('caption', JSON.stringify({
+        name: file.name,
+        size: file.size,
+        folder: currentFolder,
+        date: new Date().toISOString()
+      }));
 
-      formData.append(fileKey, file);
-
-      const res = await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/${endpoint}`, {
-        method: 'POST',
-        body: formData
-      });
-
-      const data = await res.json();
-
-      if (data.ok) {
-        let fileId = '';
-        if (endpoint === 'sendPhoto') {
-          const photos = data.result.photo;
-          fileId = photos[photos.length - 1].file_id;
-        } else {
-          fileId = data.result.document.file_id;
-        }
-
-        const fileInfoRes = await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/getFile?file_id=${fileId}`);
-        const fileInfo = await fileInfoRes.json();
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${endpoint}`, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
         
-        let downloadUrl = '';
-        if (fileInfo.ok) {
-          downloadUrl = `https://api.telegram.org/file/bot${TG_BOT_TOKEN}/${fileInfo.result.file_path}`;
+        if (data.ok) {
+          let fileId = '';
+          if (isImg) fileId = data.result.photo.slice(-1)[0].file_id;
+          else if (isVid) fileId = data.result.video.file_id;
+          else fileId = data.result.document.file_id;
+
+          const pathRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`);
+          const pathData = await pathRes.json();
+          const fileUrl = pathData.ok ? `https://api.telegram.org/file/bot${BOT_TOKEN}/${pathData.result.file_path}` : '';
+
+          const newItem = {
+            id: data.result.message_id,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            folder: currentFolder,
+            url: fileUrl,
+            fileId,
+            date: new Date().toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })
+          };
+
+          saveFiles([newItem, ...files]);
         }
-
-        const newFile = {
-          id: data.result.message_id.toString(),
-          name: file.name,
-          type: file.type.startsWith('image/') ? 'image' : 'document',
-          size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
-          folder: currentFolder,
-          url: downloadUrl
-        };
-
-        setFiles(prev => [newFile, ...prev]);
-      } else {
-        alert('Telegram Error: ' + data.description);
+      } catch (err) {
+        console.error(err);
       }
-    } catch (err) {
-      alert('Upload failed: ' + err.message);
-    } finally {
-      setIsUploading(false);
+      setUploadProgress(Math.round(((i + 1) / uploadedFiles.length) * 100));
     }
+
+    setIsUploading(false);
+    setUploadProgress(0);
   };
 
-  const visibleFolders = folders.filter(f => f.parent === currentFolder);
-
-  const visibleFiles = files.filter(f => {
-    const inFolder = f.folder === currentFolder;
+  const filteredFiles = files.filter(f => {
     const matchesSearch = f.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = filterType === 'all' || f.type === filterType;
-    return inFolder && matchesSearch && matchesFilter;
+    if (activeTab === 'gallery') {
+      return matchesSearch && (f.type.startsWith('image/') || f.type.startsWith('video/'));
+    }
+    if (activeTab === 'drive') {
+      return matchesSearch && (currentFolder ? f.folder === currentFolder : true);
+    }
+    return matchesSearch;
   });
 
+  const formatSize = (bytes) => {
+    if (!bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
   return (
-    <div style={{ fontFamily: 'sans-serif', minHeight: '100vh', background: '#0b1120', color: '#f8fafc', margin: 0 }}>
-      {/* Top Navbar */}
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Icons.HardDrive />
+    <div className="flex flex-col h-screen w-full bg-slate-950 text-slate-100 select-none overflow-hidden font-sans">
+      <header className="px-4 pt-12 pb-3 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 flex items-center justify-between z-10">
+        <div className="flex items-center space-x-3">
+          {currentFolder && activeTab === 'drive' ? (
+            <button onClick={() => setCurrentFolder('')} className="p-1.5 rounded-full bg-slate-800 active:scale-95">
+              <ArrowLeft size={20} />
+            </button>
+          ) : (
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-md">
+              <HardDrive size={20} className="text-white" />
+            </div>
+          )}
           <div>
-            <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '600' }}>Telegram Cloud Gallery</h2>
-            <div style={{ fontSize: '11px', color: '#10b981' }}>● Channel Active</div>
+            <h1 className="text-lg font-bold tracking-tight text-white leading-tight">
+              {activeTab === 'gallery' ? 'Gallery' : activeTab === 'drive' ? (currentFolder || 'Cloud Drive') : 'Storage'}
+            </h1>
+            <p className="text-[11px] font-medium text-emerald-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              Telegram Private Cloud
+            </p>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', background: isUploading ? '#475569' : '#2563eb', padding: '8px 16px', borderRadius: '8px', cursor: isUploading ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 'bold' }}>
-            <Icons.Upload /> {isUploading ? 'Uploading...' : 'Upload'}
-            <input type="file" onChange={handleUpload} disabled={isUploading} style={{ display: 'none' }} />
-          </label>
-          <button onClick={handleCreateFolder} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#1e293b', color: '#fff', border: '1px solid #334155', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
-            <Icons.Plus /> New Folder
+
+        {activeTab === 'drive' && (
+          <button 
+            onClick={() => setViewMode(v => v === 'grid' ? 'list' : 'grid')}
+            className="p-2 rounded-xl bg-slate-800 text-slate-300 active:scale-95"
+          >
+            {viewMode === 'grid' ? <List size={18} /> : <Grid size={18} />}
           </button>
-        </div>
+        )}
       </header>
 
-      {/* Control Strip: Search & Filter */}
-      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '16px 16px 0 16px', display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'space-between', alignItems: 'center' }}>
-        <input 
-          type="text" 
-          placeholder="Search files..." 
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{ background: '#131d33', border: '1px solid #1e293b', color: '#fff', padding: '8px 14px', borderRadius: '8px', outline: 'none', width: '220px', fontSize: '13px' }}
-        />
-        <div style={{ display: 'flex', gap: '6px' }}>
-          {['all', 'image', 'document'].map(t => (
-            <button 
-              key={t}
-              onClick={() => setFilterType(t)}
-              style={{ background: filterType === t ? '#2563eb' : '#131d33', border: '1px solid #1e293b', color: '#fff', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', textTransform: 'capitalize', cursor: 'pointer' }}
-            >
-              {t === 'all' ? 'All Files' : t + 's'}
-            </button>
-          ))}
+      <div className="px-4 py-2.5 bg-slate-950">
+        <div className="relative flex items-center">
+          <Search size={16} className="absolute left-3.5 text-slate-400" />
+          <input
+            type="text"
+            placeholder={activeTab === 'gallery' ? "Search photos & videos..." : "Search cloud documents..."}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-2 pl-10 pr-4 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-all"
+          />
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '20px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-          {currentFolder !== 'root' && (
-            <button onClick={() => setCurrentFolder('root')} style={{ background: '#1e293b', border: '1px solid #334155', color: '#fff', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Icons.ArrowLeft /> Back
-            </button>
-          )}
-          <span style={{ color: '#94a3b8', fontSize: '13px' }}>Path: /{currentFolder === 'root' ? '' : currentFolder}</span>
-        </div>
-
-        {/* Folders */}
-        {visibleFolders.length > 0 && (
-          <section style={{ marginBottom: '28px' }}>
-            <h3 style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '12px', letterSpacing: '0.05em' }}>FOLDERS</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px' }}>
-              {visibleFolders.map(folder => (
-                <div key={folder.id} onClick={() => setCurrentFolder(folder.id)} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', background: '#131d33', borderRadius: '10px', cursor: 'pointer', border: '1px solid #1e293b' }}>
-                  <Icons.Folder />
-                  <span style={{ fontSize: '13px', fontWeight: '500' }}>{folder.name}</span>
-                </div>
-              ))}
+      <main className="flex-1 overflow-y-auto px-4 pb-24">
+        {isUploading && (
+          <div className="my-3 p-3 bg-sky-950/60 border border-sky-800 rounded-2xl flex flex-col gap-2">
+            <div className="flex justify-between text-xs text-sky-300 font-semibold">
+              <span>Backing up to Telegram Channel...</span>
+              <span>{uploadProgress}%</span>
             </div>
-          </section>
+            <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-sky-500 transition-all duration-300 rounded-full"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          </div>
         )}
 
-        {/* Files Grid */}
-        <section>
-          <h3 style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '12px', letterSpacing: '0.05em' }}>MEDIA & FILES ({visibleFiles.length})</h3>
-          {visibleFiles.length === 0 ? (
-            <div style={{ padding: '32px', textAlign: 'center', color: '#64748b', background: '#131d33', borderRadius: '12px', border: '1px dashed #334155', fontSize: '13px' }}>
-              No files found. Click "Upload" to store directly on Telegram!
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '14px' }}>
-              {visibleFiles.map(file => (
-                <div 
-                  key={file.id} 
-                  onClick={() => file.type === 'image' && setActivePreview(file)}
-                  style={{ background: '#131d33', borderRadius: '12px', overflow: 'hidden', border: '1px solid #1e293b', cursor: file.type === 'image' ? 'zoom-in' : 'default', display: 'flex', flexDirection: 'column' }}
-                >
-                  {file.type === 'image' && file.url ? (
-                    <img src={file.url} alt={file.name} style={{ width: '100%', height: '140px', objectFit: 'cover' }} />
-                  ) : (
-                    <div style={{ height: '140px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0b1120' }}>
-                      <Icons.FileText />
-                    </div>
-                  )}
-                  <div style={{ padding: '10px', flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontSize: '13px', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</div>
-                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>{file.size}</div>
-                    </div>
-                    <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      {file.url ? (
-                        <a href={file.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#38bdf8', textDecoration: 'none' }}>
-                          <Icons.Download /> Open
-                        </a>
-                      ) : <span />}
-                      <button onClick={(e) => handleDeleteFile(file.id, e)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px' }}>
-                        <Icons.Trash />
-                      </button>
-                    </div>
+        {activeTab === 'gallery' && (
+          <div className="mt-2">
+            {filteredFiles.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+                <ImageIcon size={52} className="stroke-[1.2] mb-3 text-slate-600" />
+                <p className="text-sm font-medium">No media uploaded yet</p>
+                <p className="text-xs text-slate-600 mt-1">Tap the + button below to backup photos</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-1.5">
+                {filteredFiles.map((file) => (
+                  <div
+                    key={file.id}
+                    onClick={() => setSelectedMedia(file)}
+                    className="relative aspect-square rounded-lg overflow-hidden bg-slate-900 active:opacity-80 transition"
+                  >
+                    {file.type.startsWith('video/') ? (
+                      <div className="w-full h-full flex items-center justify-center bg-slate-800">
+                        <Film size={26} className="text-slate-400" />
+                      </div>
+                    ) : (
+                      <img 
+                        src={file.url} 
+                        alt={file.name} 
+                        className="w-full h-full object-cover" 
+                        loading="lazy"
+                      />
+                    )}
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'drive' && (
+          <div className="mt-2 space-y-4">
+            {!currentFolder && (
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">Folders</p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {folders.map((f) => (
+                    <div
+                      key={f}
+                      onClick={() => setCurrentFolder(f)}
+                      className="p-3 bg-slate-900 border border-slate-800/80 rounded-2xl flex items-center justify-between active:scale-98 active:bg-slate-800 transition"
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <div className="p-2 rounded-xl bg-sky-500/10 text-sky-400">
+                          <Folder size={18} />
+                        </div>
+                        <span className="text-sm font-medium text-slate-200 truncate">{f}</span>
+                      </div>
+                      <ChevronRight size={16} className="text-slate-600" />
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+            )}
+
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+                {currentFolder ? `${currentFolder} Files` : 'All Documents & Files'}
+              </p>
+
+              {filteredFiles.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+                  <FileText size={48} className="stroke-[1.2] mb-2 text-slate-600" />
+                  <p className="text-sm font-medium">No files found</p>
+                </div>
+              ) : viewMode === 'list' ? (
+                <div className="space-y-2">
+                  {filteredFiles.map((file) => (
+                    <div 
+                      key={file.id} 
+                      onClick={() => setSelectedMedia(file)}
+                      className="p-3 bg-slate-900 border border-slate-800/70 rounded-2xl flex items-center justify-between active:bg-slate-800"
+                    >
+                      <div className="flex items-center space-x-3 overflow-hidden">
+                        <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 shrink-0">
+                          {file.type.startsWith('image/') ? <ImageIcon size={18} /> : 
+                           file.type.startsWith('video/') ? <Film size={18} /> : 
+                           file.type.startsWith('audio/') ? <Music size={18} /> : <FileText size={18} />}
+                        </div>
+                        <div className="truncate">
+                          <p className="text-sm font-medium text-slate-200 truncate">{file.name}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">{file.date} • {formatSize(file.size)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2.5">
+                  {filteredFiles.map((file) => (
+                    <div 
+                      key={file.id} 
+                      onClick={() => setSelectedMedia(file)}
+                      className="p-3 bg-slate-900 border border-slate-800/70 rounded-2xl flex flex-col justify-between aspect-square active:scale-98 transition"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
+                        {file.type.startsWith('image/') ? <ImageIcon size={20} /> : <FileText size={20} />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-200 truncate">{file.name}</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">{formatSize(file.size)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </section>
+          </div>
+        )}
+
+        {activeTab === 'stats' && (
+          <div className="mt-4 space-y-4">
+            <div className="p-5 bg-gradient-to-br from-slate-900 to-indigo-950 border border-indigo-900/40 rounded-3xl">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="p-2.5 rounded-2xl bg-indigo-500/20 text-indigo-400">
+                  <Sparkles size={24} />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-white">Unlimited Cloud</h2>
+                  <p className="text-xs text-indigo-300">Powered by Telegram Channel API</p>
+                </div>
+              </div>
+              <div className="space-y-1.5 text-xs text-slate-400">
+                <div className="flex justify-between">
+                  <span>Total Files:</span>
+                  <span className="font-semibold text-slate-200">{files.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Channel ID:</span>
+                  <span className="font-semibold text-slate-200">{CHANNEL_ID}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Cloud Limit:</span>
+                  <span className="font-semibold text-emerald-400">Unlimited (up to 2GB/file)</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                if (window.confirm("Clear offline app cache? Files in your Telegram channel will remain safe.")) {
+                  localStorage.removeItem('tg_cloud_media_v2');
+                  setFiles([]);
+                }
+              }}
+              className="w-full py-3.5 px-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl text-xs font-semibold active:bg-red-500/20"
+            >
+              Clear Local App Cache
+            </button>
+          </div>
+        )}
       </main>
 
-      {/* Full-Screen Lightbox Preview Modal */}
-      {activePreview && (
-        <div onClick={() => setActivePreview(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.88)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-          <div style={{ position: 'absolute', top: '16px', right: '20px', cursor: 'pointer', color: '#fff' }}>
-            <Icons.Close />
+      <input 
+        type="file" 
+        multiple 
+        ref={fileInputRef} 
+        onChange={handleUpload} 
+        className="hidden" 
+      />
+      <button
+        onClick={() => fileInputRef.current && fileInputRef.current.click()}
+        className="fixed bottom-20 right-5 w-14 h-14 rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-sky-500/25 active:scale-95 transition-all z-20"
+      >
+        <Plus size={28} />
+      </button>
+
+      <nav className="fixed bottom-0 left-0 right-0 h-16 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 px-6 flex items-center justify-around z-20">
+        <button
+          onClick={() => setActiveTab('gallery')}
+          className={`flex flex-col items-center gap-1 transition ${activeTab === 'gallery' ? 'text-sky-400 font-semibold' : 'text-slate-400'}`}
+        >
+          <ImageIcon size={20} />
+          <span className="text-[11px]">Photos</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('drive')}
+          className={`flex flex-col items-center gap-1 transition ${activeTab === 'drive' ? 'text-sky-400 font-semibold' : 'text-slate-400'}`}
+        >
+          <Folder size={20} />
+          <span className="text-[11px]">Files & Drive</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('stats')}
+          className={`flex flex-col items-center gap-1 transition ${activeTab === 'stats' ? 'text-sky-400 font-semibold' : 'text-slate-400'}`}
+        >
+          <HardDrive size={20} />
+          <span className="text-[11px]">Cloud</span>
+        </button>
+      </nav>
+
+      {selectedMedia && (
+        <div className="fixed inset-0 bg-black/95 z-50 flex flex-col justify-between p-4 backdrop-blur-sm">
+          <div className="flex items-center justify-between pt-8">
+            <button onClick={() => setSelectedMedia(null)} className="p-2 text-white/80 rounded-full bg-white/10">
+              <ArrowLeft size={22} />
+            </button>
+            <p className="text-sm font-medium text-white truncate max-w-[200px]">{selectedMedia.name}</p>
+            <a 
+              href={selectedMedia.url} 
+              target="_blank" 
+              rel="noreferrer" 
+              download 
+              className="p-2 text-white/80 rounded-full bg-white/10"
+            >
+              <Download size={20} />
+            </a>
           </div>
-          <img src={activePreview.url} alt={activePreview.name} style={{ maxWidth: '90%', maxHeight: '80vh', borderRadius: '8px', objectFit: 'contain' }} />
-          <div style={{ color: '#fff', marginTop: '12px', fontSize: '14px', textAlign: 'center' }}>{activePreview.name}</div>
+
+          <div className="flex-1 flex items-center justify-center p-2">
+            {selectedMedia.type.startsWith('image/') ? (
+              <img src={selectedMedia.url} alt={selectedMedia.name} className="max-h-full max-w-full rounded-xl object-contain" />
+            ) : selectedMedia.type.startsWith('video/') ? (
+              <video src={selectedMedia.url} controls className="max-h-full max-w-full rounded-xl" autoPlay />
+            ) : (
+              <div className="text-center p-8 bg-slate-900 border border-slate-800 rounded-3xl">
+                <FileText size={48} className="mx-auto text-indigo-400 mb-3" />
+                <p className="text-sm font-medium text-slate-200">{selectedMedia.name}</p>
+                <p className="text-xs text-slate-500 mt-1">{formatSize(selectedMedia.size)}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="pb-6 text-center text-xs text-slate-400">
+            Uploaded {selectedMedia.date} to Telegram Private Channel
+          </div>
         </div>
       )}
     </div>
